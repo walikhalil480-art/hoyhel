@@ -1,0 +1,26 @@
+{
+  "name": "luxehaven-worker",
+  "version": "1.0.0",
+  "description": "Background job processing worker for LuxeHaven",
+  "main": "dist/worker.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/worker.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/worker.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.16.0",
+    "bullmq": "^5.8.0",
+    "dotenv": "^16.4.5",
+    "nodemailer": "^6.9.14",
+    "redis": "^4.6.14",
+    "winston": "^3.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/nodemailer": "^6.4.15",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.5.2"
+  }
+}

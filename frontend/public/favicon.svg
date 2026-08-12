@@ -1,0 +1,17 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="hoyhel-fav-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#4F46E5" />
+    </linearGradient>
+    <linearGradient id="hoyhel-fav-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#EF4444" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#hoyhel-fav-grad)" />
+  <rect x="176" y="176" width="36" height="160" rx="18" fill="#FFFFFF" />
+  <rect x="300" y="176" width="36" height="160" rx="18" fill="#FFFFFF" />
+  <path d="M194 224 C194 186 318 186 318 224 V260 H194 V224 Z" fill="url(#hoyhel-fav-accent)" />
+  <circle cx="256" cy="222" r="22" fill="#FFFFFF" />
+</svg>

@@ -1,0 +1,65 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "HoyHel Property Rental & Booking API",
+    "version": "1.0.0",
+    "description": "Production-Grade API documentation for HoyHel property rental platform."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5000/api/v1",
+      "description": "Local Development Server"
+    }
+  ],
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "summary": "Register a new user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string" },
+                  "password": { "type": "string" },
+                  "firstName": { "type": "string" },
+                  "lastName": { "type": "string" },
+                  "role": { "type": "string", "enum": ["GUEST", "HOST"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "User created successfully" }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Authenticate user and receive JWT tokens",
+        "responses": {
+          "200": { "description": "Login successful" }
+        }
+      }
+    },
+    "/properties": {
+      "get": {
+        "summary": "Search properties with filters",
+        "responses": {
+          "200": { "description": "List of matching published properties" }
+        }
+      }
+    },
+    "/bookings": {
+      "post": {
+        "summary": "Create a new booking with price calculation & double-booking protection",
+        "responses": {
+          "201": { "description": "Booking created in PENDING status" }
+        }
+      }
+    }
+  }
+}
