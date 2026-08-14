@@ -204,6 +204,12 @@ export class MessagingService {
       throw new ForbiddenError('You are not a participant in this conversation');
     }
 
+    const sender = await prisma.user.findUnique({ where: { id: senderId } });
+    if (!sender || !sender.isActive || sender.isSuspended || sender.isBlocked || sender.isBanned) {
+      const reason = sender?.suspensionReason || sender?.blockedReason || sender?.banReason || 'Your account is currently restricted from sending messages.';
+      throw new ForbiddenError(`Account Restricted: ${reason}`);
+    }
+
     const recipientId = conversation.guestId === senderId ? conversation.hostId : conversation.guestId;
     const senderUser = conversation.guestId === senderId ? conversation.guest : conversation.host;
 

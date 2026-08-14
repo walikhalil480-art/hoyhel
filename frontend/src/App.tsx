@@ -23,6 +23,8 @@ import { AdminBookingsPage } from './pages/AdminBookingsPage';
 import { BecomeHostPage } from './pages/BecomeHostPage';
 import { AdminHostsPage } from './pages/AdminHostsPage';
 import { AdminPropertiesPage } from './pages/AdminPropertiesPage';
+import { AdminUsersPage } from './pages/AdminUsersPage';
+import { AdminReportsPage } from './pages/AdminReportsPage';
 import { HostPropertiesPage } from './pages/HostPropertiesPage';
 import { HostEarningsPage } from './pages/HostEarningsPage';
 import { HostCalendarPage } from './pages/HostCalendarPage';
@@ -88,6 +90,8 @@ export const App: React.FC = () => {
               <Route path="/admin" element={<AdminDashboardPage />} />
               <Route path="/admin/bookings" element={<AdminBookingsPage />} />
               <Route path="/admin/reservations" element={<AdminBookingsPage />} />
+              <Route path="/admin/users" element={<AdminUsersPage />} />
+              <Route path="/admin/reports" element={<AdminReportsPage />} />
               <Route path="/admin/hosts" element={<AdminHostsPage />} />
               <Route path="/admin/properties" element={<AdminPropertiesPage />} />
               <Route path="/messages" element={<MessagesPage />} />

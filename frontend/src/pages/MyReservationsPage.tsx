@@ -110,6 +110,19 @@ export const MyReservationsPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Account Restriction Status Banner */}
+      {(user?.isSuspended || user?.isBlocked || user?.isBanned || user?.isActive === false) && (
+        <div className="mb-8 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 text-xs text-amber-300">
+          <AlertCircle className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
+          <div>
+            <h4 className="font-bold text-amber-400 text-sm">Account Status Notice</h4>
+            <p className="mt-0.5 leading-relaxed">
+              Your account currently has an active administrative restriction. You may inspect your historical reservation records below, but new reservation holds and message dispatching are disabled. For questions or appeals, please contact platform support.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Error Banner */}
       {error && (
         <div className="mb-8 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-between text-xs text-rose-400">

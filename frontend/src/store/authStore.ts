@@ -11,6 +11,13 @@ export interface User {
   roles?: string[];
   isEmailVerified?: boolean;
   isActive?: boolean;
+  isSuspended?: boolean;
+  suspensionReason?: string;
+  isBlocked?: boolean;
+  blockedReason?: string;
+  isBanned?: boolean;
+  banReason?: string;
+  status?: string;
 }
 
 interface AuthState {

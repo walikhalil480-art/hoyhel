@@ -24,6 +24,7 @@ import messagingRoutes from './modules/messaging/messaging.routes';
 import notificationRoutes from './modules/notifications/notifications.routes';
 import path from 'path';
 import adminRoutes from './modules/admin/admin.routes';
+import reportRoutes from './modules/reports/reports.routes';
 
 const app = express();
 
@@ -92,6 +93,7 @@ app.use('/api/v1/favorites', favoriteRoutes);
 app.use('/api/v1/messaging', messagingRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/reports', reportRoutes);
 
 // Global Error Handler
 app.use(errorHandler);

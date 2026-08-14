@@ -210,6 +210,11 @@ export class PropertyService {
       throw new ForbiddenError('Only approved hosts can create property listings');
     }
 
+    if (!host.isActive || host.isSuspended || host.isBlocked || host.isBanned) {
+      const reason = host.suspensionReason || host.blockedReason || host.banReason || 'Your host account is currently restricted from creating property listings';
+      throw new ForbiddenError(`Account Restricted: ${reason}`);
+    }
+
     const { amenityIds, ...fields } = data;
 
     const property = await prisma.property.create({

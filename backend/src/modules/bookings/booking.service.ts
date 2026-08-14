@@ -88,6 +88,17 @@ export class BookingService {
         throw new ValidationError('Cannot book a property that is not published');
       }
 
+      // Check guest account status
+      const guestUser = await tx.user.findUnique({
+        where: { id: guestId },
+        select: { id: true, isActive: true, isSuspended: true, isBlocked: true, isBanned: true, suspensionReason: true, blockedReason: true, banReason: true },
+      });
+
+      if (!guestUser || !guestUser.isActive || guestUser.isSuspended || guestUser.isBlocked || guestUser.isBanned) {
+        const reason = guestUser?.suspensionReason || guestUser?.blockedReason || guestUser?.banReason || 'Your account is currently restricted from creating new reservations. Please contact support.';
+        throw new ForbiddenError(`Account Restricted: ${reason}`);
+      }
+
       if (property.hostId === guestId) {
         throw new ForbiddenError('Hosts cannot book their own properties');
       }
@@ -196,7 +207,7 @@ export class BookingService {
       });
 
       return newBooking;
-    });
+    }, { timeout: 15000 });
   }
 
   async getBookingById(bookingId: string, userId: string, userRoles: string[]) {

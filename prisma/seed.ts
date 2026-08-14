@@ -59,6 +59,24 @@ async function main() {
       avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80',
     },
     {
+      email: 'tcusub777@gmail.com',
+      passwordHash: defaultHash,
+      firstName: 'Tijabo',
+      lastName: 'Cusub',
+      role: UserRoleType.GUEST,
+      phone: '+254 700 123456',
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+    },
+    {
+      email: 'khalil.wali@luxehaven.com',
+      passwordHash: hostHash,
+      firstName: 'Khalil',
+      lastName: 'Wali',
+      role: UserRoleType.HOST,
+      phone: '+254 711 987654',
+      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+    },
+    {
       email: 'admin@luxehaven.com',
       passwordHash: adminHash,
       firstName: 'Alexander',
@@ -158,10 +176,12 @@ async function main() {
     amenityIds[item.name] = a.id;
   }
 
-  const sarahId = userMap['host.sarah@luxehaven.com'] || userMap['host@example.com'];
+  const sarahId = userMap['host.sarah@luxehaven.com'];
   const davidId = userMap['host@example.com'];
+  const khalilId = userMap['khalil.wali@luxehaven.com'];
   const elenaId = userMap['guest.elena@luxehaven.com'];
   const marcusId = userMap['guest@example.com'];
+  const tijaboId = userMap['tcusub777@gmail.com'];
 
   // 5. Seed 10 Luxury Published Properties
   const propertiesData = [
@@ -225,6 +245,35 @@ async function main() {
         'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
         'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80',
         'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1200&q=80',
+      ],
+    },
+    {
+      id: 'mombasa-ocean-view-villa',
+      hostId: khalilId,
+      title: 'Modern Ocean View Villa in Mombasa',
+      description: 'Stunning modern luxury villa overlooking the ocean in Mombasa with private pool and gardens.',
+      propertyType: PropertyType.VILLA,
+      status: PropertyStatus.PUBLISHED,
+      cancellationPolicy: CancellationPolicy.FLEXIBLE,
+      basePrice: 300,
+      cleaningFee: 80,
+      serviceFee: 30,
+      securityDeposit: 200,
+      bedrooms: 3,
+      bathrooms: 3,
+      beds: 4,
+      maxGuests: 6,
+      address: '25 Beach Drive, Nyali',
+      city: 'Mombasa',
+      state: 'Coast',
+      country: 'Kenya',
+      latitude: -4.0435,
+      longitude: 39.6983,
+      isFeatured: true,
+      averageRating: 4.95,
+      reviewCount: 15,
+      images: [
+        'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=1200&q=80',
       ],
     },
     {
@@ -729,6 +778,40 @@ async function main() {
         },
       });
     }
+  }
+
+  // Booking 6: Tijabo Cusub CONFIRMED reservation LH-2026-44021
+  if (tijaboId) {
+    await prisma.booking.create({
+      data: {
+        bookingNumber: 'LH-2026-44021',
+        propertyId: 'mombasa-ocean-view-villa',
+        guestId: tijaboId,
+        checkIn: new Date('2026-08-12'),
+        checkOut: new Date('2026-08-16'),
+        guestsCount: 2,
+        nights: 4,
+        nightlyPrice: 300,
+        subtotal: 1200,
+        cleaningFee: 80,
+        serviceFee: 120,
+        taxes: 54.32,
+        discount: 0,
+        totalPrice: 1454.32,
+        status: BookingStatus.CONFIRMED,
+        specialRequests: 'Ocean view room requested.',
+        payment: {
+          create: {
+            userId: tijaboId,
+            amount: 1454.32,
+            currency: 'USD',
+            status: PaymentStatus.SUCCESS,
+            paymentMethod: PaymentMethodType.CREDIT_CARD,
+            transactionId: 'TXN-LH-2026-44021',
+          },
+        },
+      },
+    });
   }
 
   console.log('✅ Elena 3 bookings & multi-status dataset seeded.');

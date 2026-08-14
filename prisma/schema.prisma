@@ -16,6 +16,15 @@ enum UserRoleType {
   SUPPORT_AGENT
 }
 
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BLOCKED
+  BANNED
+  DEACTIVATED
+  PENDING_VERIFICATION
+}
+
 enum HostApplicationStatus {
   PENDING
   APPROVED
@@ -121,9 +130,37 @@ enum NotificationType {
   REVIEW_AVAILABLE
   ACCOUNT_SUSPENDED
   ACCOUNT_REACTIVATED
+  ACCOUNT_WARNED
+  ACCOUNT_BLOCKED
+  ACCOUNT_BANNED
+  ACCOUNT_RESTORED
+  USER_WARNED
+  USER_SUSPENDED
+  USER_UNSUSPENDED
+  USER_BLOCKED
+  USER_UNBLOCKED
+  USER_BANNED
+  USER_UNBANNED
+  REPORT_SUBMITTED
+  REPORT_UPDATED
   SECURITY_ALERT
   PAYOUT_COMPLETED
   SYSTEM_ALERT
+}
+
+enum WarningSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  SEVERE
+}
+
+enum ReportStatus {
+  OPEN
+  UNDER_REVIEW
+  PENDING
+  RESOLVED
+  DISMISSED
 }
 
 model User {
@@ -136,10 +173,16 @@ model User {
   avatarUrl              String?
   bio                    String?
   role                   UserRoleType             @default(GUEST)
+  status                 UserStatus               @default(ACTIVE)
   isEmailVerified        Boolean                  @default(false)
   isActive               Boolean                  @default(true)
   isSuspended            Boolean                  @default(false)
   suspensionReason       String?
+  isBlocked              Boolean                  @default(false)
+  blockedReason          String?
+  isBanned               Boolean                  @default(false)
+  banReason              String?
+  failedLoginAttempts    Int                      @default(0)
   lastLoginAt            DateTime?
   notificationPreferences Json?
   createdAt              DateTime                 @default(now())
@@ -164,9 +207,47 @@ model User {
   payouts                Payout[]                 @relation("HostPayouts")
   payments               Payment[]
   propertyStatusChanges  PropertyStatusHistory[]
+  warningsReceived       UserWarning[]            @relation("WarningsReceived")
+  warningsIssued         UserWarning[]            @relation("WarningsIssued")
+  reportsSubmitted       UserReport[]             @relation("ReportsSubmitted")
+  reportsReceived        UserReport[]             @relation("ReportsReceived")
 
   @@index([email])
   @@index([role])
+}
+
+model UserWarning {
+  id        String          @id @default(uuid())
+  userId    String
+  user      User            @relation("WarningsReceived", fields: [userId], references: [id], onDelete: Cascade)
+  adminId   String
+  admin     User            @relation("WarningsIssued", fields: [adminId], references: [id], onDelete: Cascade)
+  reason    String
+  severity  WarningSeverity @default(MEDIUM)
+  createdAt DateTime        @default(now())
+
+  @@index([userId])
+  @@index([adminId])
+}
+
+model UserReport {
+  id             String       @id @default(uuid())
+  reporterId     String
+  reporter       User         @relation("ReportsSubmitted", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUserId String
+  reportedUser   User         @relation("ReportsReceived", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  reason         String
+  details        String?
+  status         ReportStatus @default(PENDING)
+  adminNotes     String?
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([reporterId])
+  @@index([reportedUserId])
+  @@index([status])
 }
 
 model EmailVerificationToken {

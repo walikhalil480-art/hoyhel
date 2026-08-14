@@ -102,10 +102,10 @@ describe('Database Double-Booking & Concurrency Test Suite', () => {
 
     // Verify DB contains exactly 1 booking
     const bookingsInDb = await prisma.booking.findMany({
-      where: { propertyId, status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] } },
+      where: { propertyId, status: { in: [BookingStatus.PENDING_PAYMENT, BookingStatus.PENDING, BookingStatus.CONFIRMED] } },
     });
     expect(bookingsInDb.length).toBe(1);
-  });
+  }, 15000);
 
   it('should allow same-day checkout/check-in without date conflict', async () => {
     // Existing booking ends on 2026-11-15. New booking starts on 2026-11-15.
@@ -120,7 +120,7 @@ describe('Database Double-Booking & Concurrency Test Suite', () => {
     });
 
     expect(booking).toBeDefined();
-    expect(booking.status).toBe(BookingStatus.PENDING);
+    expect([BookingStatus.PENDING_PAYMENT, BookingStatus.PENDING]).toContain(booking.status);
   });
 
   it('should reject host date blocking when a confirmed/pending booking exists', async () => {

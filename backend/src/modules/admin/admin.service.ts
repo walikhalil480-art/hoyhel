@@ -1,6 +1,6 @@
 import { prisma } from '../../config/database';
 import { NotFoundError, ValidationError, ForbiddenError } from '../../utils/errors';
-import { BookingStatus, PaymentStatus, PropertyStatus, UserRoleType, HostApplicationStatus, NotificationType, NotificationPriority, Prisma } from '@prisma/client';
+import { BookingStatus, PaymentStatus, PropertyStatus, UserRoleType, HostApplicationStatus, NotificationType, NotificationPriority, UserStatus, WarningSeverity, ReportStatus, Prisma } from '@prisma/client';
 import { emitToUser } from '../../websocket/socket';
 
 export class AdminService {
@@ -56,10 +56,10 @@ export class AdminService {
     ]);
 
     const grossRevenue = grossStats._sum.totalPrice || 0;
-    const platformFees = grossStats._sum.serviceFee || 0;
+    const platformFees = grossStats._sum.serviceFee || Math.round(grossRevenue * 0.10 * 100) / 100;
     const refundedAmount = refundedStats._sum.refundedAmount || 0;
-    const hostEarnings = Math.max(0, grossRevenue - platformFees - refundedAmount);
-    const netPlatformRevenue = Math.max(0, platformFees - refundedAmount);
+    const hostEarnings = Math.max(0, grossRevenue - platformFees);
+    const netPlatformRevenue = platformFees;
 
     return {
       totalUsers,
@@ -97,16 +97,47 @@ export class AdminService {
 
     if (params.search) {
       const q = params.search.trim();
-      where.OR = [
+      const parts = q.split(/\s+/);
+
+      const baseOr: Prisma.BookingWhereInput[] = [
         { bookingNumber: { contains: q, mode: 'insensitive' } },
         { guest: { email: { contains: q, mode: 'insensitive' } } },
         { guest: { firstName: { contains: q, mode: 'insensitive' } } },
         { guest: { lastName: { contains: q, mode: 'insensitive' } } },
         { property: { title: { contains: q, mode: 'insensitive' } } },
+        { property: { city: { contains: q, mode: 'insensitive' } } },
+        { property: { country: { contains: q, mode: 'insensitive' } } },
         { property: { host: { firstName: { contains: q, mode: 'insensitive' } } } },
         { property: { host: { lastName: { contains: q, mode: 'insensitive' } } } },
         { property: { host: { email: { contains: q, mode: 'insensitive' } } } },
       ];
+
+      if (parts.length > 1) {
+        const firstPart = parts[0];
+        const lastPart = parts.slice(1).join(' ');
+        baseOr.push(
+          {
+            guest: {
+              AND: [
+                { firstName: { contains: firstPart, mode: 'insensitive' } },
+                { lastName: { contains: lastPart, mode: 'insensitive' } },
+              ],
+            },
+          },
+          {
+            property: {
+              host: {
+                AND: [
+                  { firstName: { contains: firstPart, mode: 'insensitive' } },
+                  { lastName: { contains: lastPart, mode: 'insensitive' } },
+                ],
+              },
+            },
+          }
+        );
+      }
+
+      where.OR = baseOr;
     }
 
     if (params.status) {
@@ -222,7 +253,14 @@ export class AdminService {
     return updated;
   }
 
-  async getUsers(params: { search?: string; role?: UserRoleType; isSuspended?: boolean; page?: number; limit?: number }) {
+  async getUsers(params: {
+    search?: string;
+    role?: UserRoleType;
+    statusFilter?: string;
+    isSuspended?: boolean;
+    page?: number;
+    limit?: number;
+  }) {
     const page = params.page || 1;
     const limit = params.limit || 20;
     const skip = (page - 1) * limit;
@@ -230,15 +268,32 @@ export class AdminService {
     const where: Prisma.UserWhereInput = {};
 
     if (params.search) {
+      const q = params.search.trim();
       where.OR = [
-        { email: { contains: params.search, mode: 'insensitive' } },
-        { firstName: { contains: params.search, mode: 'insensitive' } },
-        { lastName: { contains: params.search, mode: 'insensitive' } },
+        { email: { contains: q, mode: 'insensitive' } },
+        { firstName: { contains: q, mode: 'insensitive' } },
+        { lastName: { contains: q, mode: 'insensitive' } },
+        { id: { equals: q } },
       ];
     }
 
     if (params.role) where.role = params.role;
-    if (params.isSuspended !== undefined) where.isSuspended = params.isSuspended;
+
+    if (params.statusFilter) {
+      const s = params.statusFilter.toUpperCase();
+      if (s === 'SUSPENDED') where.isSuspended = true;
+      else if (s === 'BLOCKED') where.isBlocked = true;
+      else if (s === 'BANNED') where.isBanned = true;
+      else if (s === 'DEACTIVATED') where.isActive = false;
+      else if (s === 'ACTIVE') {
+        where.isActive = true;
+        where.isSuspended = false;
+        where.isBlocked = false;
+        where.isBanned = false;
+      }
+    } else if (params.isSuspended !== undefined) {
+      where.isSuspended = params.isSuspended;
+    }
 
     const [total, users] = await Promise.all([
       prisma.user.count({ where }),
@@ -253,13 +308,27 @@ export class AdminService {
           firstName: true,
           lastName: true,
           phone: true,
+          avatarUrl: true,
           role: true,
+          status: true,
           isEmailVerified: true,
           isActive: true,
           isSuspended: true,
           suspensionReason: true,
+          isBlocked: true,
+          blockedReason: true,
+          isBanned: true,
+          banReason: true,
           lastLoginAt: true,
           createdAt: true,
+          _count: {
+            select: {
+              bookings: true,
+              properties: true,
+              warningsReceived: true,
+              reportsReceived: true,
+            },
+          },
         },
       }),
     ]);
@@ -271,16 +340,385 @@ export class AdminService {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
-        properties: { take: 5 },
-        bookings: { take: 5 },
+        properties: {
+          take: 10,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            title: true,
+            propertyType: true,
+            status: true,
+            basePrice: true,
+            city: true,
+            country: true,
+            createdAt: true,
+            images: { take: 1, select: { url: true } },
+          },
+        },
+        bookings: {
+          take: 10,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            property: { select: { id: true, title: true, city: true, country: true } },
+            payment: { select: { status: true, amount: true, paymentMethod: true } },
+          },
+        },
+        warningsReceived: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            admin: { select: { id: true, firstName: true, lastName: true, email: true } },
+          },
+        },
+        reportsReceived: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            reporter: { select: { id: true, firstName: true, lastName: true, email: true } },
+          },
+        },
+        reportsSubmitted: {
+          orderBy: { createdAt: 'desc' },
+        },
         hostApplications: true,
-        auditLogs: { take: 10, orderBy: { createdAt: 'desc' } },
+        auditLogs: { take: 20, orderBy: { createdAt: 'desc' } },
       },
     });
 
     if (!user) throw new NotFoundError('User');
+
+    // Aggregate statistics for user summary
+    const [totalBookingsCount, activeBookingsCount, completedBookingsCount, totalSpentAgg] = await Promise.all([
+      prisma.booking.count({ where: { guestId: userId } }),
+      prisma.booking.count({
+        where: { guestId: userId, status: { in: [BookingStatus.CONFIRMED, BookingStatus.CHECKED_IN, BookingStatus.PENDING_PAYMENT] } },
+      }),
+      prisma.booking.count({ where: { guestId: userId, status: BookingStatus.COMPLETED } }),
+      prisma.booking.aggregate({
+        where: { guestId: userId, status: { in: [BookingStatus.CONFIRMED, BookingStatus.CHECKED_IN, BookingStatus.COMPLETED] } },
+        _sum: { totalPrice: true },
+      }),
+    ]);
+
     const { passwordHash, ...sanitized } = user;
+    return {
+      ...sanitized,
+      stats: {
+        totalBookings: totalBookingsCount,
+        activeBookings: activeBookingsCount,
+        completedBookings: completedBookingsCount,
+        totalSpent: Math.round((totalSpentAgg._sum.totalPrice || 0) * 100) / 100,
+        hostedPropertiesCount: user.properties.length,
+        warningsCount: user.warningsReceived.length,
+        reportsReceivedCount: user.reportsReceived.length,
+      },
+    };
+  }
+
+  async updateUserModerationStatus(
+    adminUserId: string,
+    targetUserId: string,
+    data: {
+      action: 'SUSPEND' | 'UNSUSPEND' | 'BLOCK' | 'UNBLOCK' | 'BAN' | 'UNBAN' | 'DEACTIVATE' | 'REACTIVATE';
+      reason?: string;
+    }
+  ) {
+    if (adminUserId === targetUserId && (data.action === 'SUSPEND' || data.action === 'BLOCK' || data.action === 'BAN' || data.action === 'DEACTIVATE')) {
+      throw new ForbiddenError('You cannot restrict your own administrator account');
+    }
+
+    const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!targetUser) throw new NotFoundError('User');
+
+    if (targetUser.role === UserRoleType.ADMIN && (data.action === 'SUSPEND' || data.action === 'BLOCK' || data.action === 'BAN' || data.action === 'DEACTIVATE')) {
+      const activeAdminCount = await prisma.user.count({
+        where: { role: UserRoleType.ADMIN, isActive: true, isSuspended: false, isBlocked: false, isBanned: false },
+      });
+      if (activeAdminCount <= 1) {
+        throw new ForbiddenError('Cannot restrict the last active Administrator on the platform');
+      }
+    }
+
+    let updateData: Prisma.UserUpdateInput = {};
+    let auditAction = '';
+    let notificationType: NotificationType = NotificationType.ACCOUNT_SUSPENDED;
+    let notifTitle = '';
+    let notifMessage = '';
+
+    switch (data.action) {
+      case 'SUSPEND':
+        updateData = {
+          isSuspended: true,
+          suspensionReason: data.reason || 'Account suspended by administrator',
+          status: UserStatus.SUSPENDED,
+        };
+        auditAction = 'USER_SUSPENDED';
+        notificationType = NotificationType.ACCOUNT_SUSPENDED;
+        notifTitle = '⚠️ Account Suspended';
+        notifMessage = `Your account has been suspended: ${data.reason || 'Please contact support for further information.'}`;
+        break;
+
+      case 'UNSUSPEND':
+        updateData = {
+          isSuspended: false,
+          suspensionReason: null,
+          status: targetUser.isBlocked ? UserStatus.BLOCKED : targetUser.isBanned ? UserStatus.BANNED : UserStatus.ACTIVE,
+        };
+        auditAction = 'USER_UNSUSPENDED';
+        notificationType = NotificationType.ACCOUNT_REACTIVATED;
+        notifTitle = '✅ Account Suspension Lifted';
+        notifMessage = 'Your account suspension has been lifted by administration.';
+        break;
+
+      case 'BLOCK':
+        updateData = {
+          isBlocked: true,
+          blockedReason: data.reason || 'Account blocked by administrator',
+          status: UserStatus.BLOCKED,
+        };
+        auditAction = 'USER_BLOCKED';
+        notificationType = NotificationType.ACCOUNT_BLOCKED;
+        notifTitle = '🚫 Account Restricted';
+        notifMessage = `Your account has been blocked: ${data.reason || 'Contact administration.'}`;
+        break;
+
+      case 'UNBLOCK':
+        updateData = {
+          isBlocked: false,
+          blockedReason: null,
+          status: targetUser.isSuspended ? UserStatus.SUSPENDED : targetUser.isBanned ? UserStatus.BANNED : UserStatus.ACTIVE,
+        };
+        auditAction = 'USER_UNBLOCKED';
+        notificationType = NotificationType.ACCOUNT_RESTORED;
+        notifTitle = '✅ Account Block Lifted';
+        notifMessage = 'Your account restrictions have been removed.';
+        break;
+
+      case 'BAN':
+        updateData = {
+          isActive: false,
+          isBanned: true,
+          banReason: data.reason || 'Account permanently banned',
+          status: UserStatus.BANNED,
+        };
+        auditAction = 'USER_BANNED';
+        notificationType = NotificationType.ACCOUNT_BANNED;
+        notifTitle = '⛔ Account Banned';
+        notifMessage = `Your account has been permanently banned: ${data.reason || 'Policy violation.'}`;
+        break;
+
+      case 'UNBAN':
+        updateData = {
+          isActive: true,
+          isBanned: false,
+          banReason: null,
+          status: UserStatus.ACTIVE,
+        };
+        auditAction = 'USER_UNBANNED';
+        notificationType = NotificationType.ACCOUNT_RESTORED;
+        notifTitle = '✅ Account Ban Lifted';
+        notifMessage = 'Your account ban has been revoked by administration.';
+        break;
+
+      case 'DEACTIVATE':
+        updateData = {
+          isActive: false,
+          status: UserStatus.DEACTIVATED,
+        };
+        auditAction = 'USER_DEACTIVATED';
+        notificationType = NotificationType.ACCOUNT_SUSPENDED;
+        notifTitle = 'Account Deactivated';
+        notifMessage = 'Your account has been deactivated.';
+        break;
+
+      case 'REACTIVATE':
+        updateData = {
+          isActive: true,
+          isSuspended: false,
+          isBlocked: false,
+          isBanned: false,
+          status: UserStatus.ACTIVE,
+        };
+        auditAction = 'USER_REACTIVATED';
+        notificationType = NotificationType.ACCOUNT_REACTIVATED;
+        notifTitle = '✅ Account Reactivated';
+        notifMessage = 'Your account has been reactivated.';
+        break;
+    }
+
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      const u = await tx.user.update({
+        where: { id: targetUserId },
+        data: updateData,
+      });
+
+      // If restricting user, revoke active authentication sessions immediately
+      if (['SUSPEND', 'BLOCK', 'BAN', 'DEACTIVATE'].includes(data.action)) {
+        await tx.refreshToken.updateMany({ where: { userId: targetUserId }, data: { isRevoked: true } });
+        await tx.userSession.updateMany({ where: { userId: targetUserId }, data: { isValid: false } });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          userId: adminUserId,
+          action: auditAction,
+          resource: 'User',
+          resourceId: targetUserId,
+          details: { reason: data.reason || null, action: data.action },
+        },
+      });
+
+      await tx.notification.create({
+        data: {
+          userId: targetUserId,
+          type: notificationType,
+          priority: NotificationPriority.HIGH,
+          title: notifTitle,
+          message: notifMessage,
+          data: { action: data.action, reason: data.reason || null },
+        },
+      });
+
+      return u;
+    });
+
+    // Real-time socket notification
+    const notif = await prisma.notification.findFirst({
+      where: { userId: targetUserId },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (notif) emitToUser(targetUserId, 'notification', notif);
+
+    const { passwordHash, ...sanitized } = updatedUser;
     return sanitized;
+  }
+
+  async issueUserWarning(
+    adminUserId: string,
+    targetUserId: string,
+    data: { reason: string; severity?: WarningSeverity }
+  ) {
+    const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!targetUser) throw new NotFoundError('User');
+
+    if (!data.reason || data.reason.trim().length === 0) {
+      throw new ValidationError('A reason is required when issuing a user warning');
+    }
+
+    const severity = data.severity || WarningSeverity.MEDIUM;
+
+    const warning = await prisma.$transaction(async (tx) => {
+      const w = await tx.userWarning.create({
+        data: {
+          userId: targetUserId,
+          adminId: adminUserId,
+          reason: data.reason.trim(),
+          severity,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: adminUserId,
+          action: 'USER_WARNED',
+          resource: 'User',
+          resourceId: targetUserId,
+          details: { warningId: w.id, reason: data.reason.trim(), severity },
+        },
+      });
+
+      await tx.notification.create({
+        data: {
+          userId: targetUserId,
+          type: NotificationType.ACCOUNT_WARNED,
+          priority: NotificationPriority.HIGH,
+          title: `⚠️ Official Warning Issued (${severity} Severity)`,
+          message: `Official platform warning: ${data.reason.trim()}`,
+          data: { warningId: w.id, severity },
+        },
+      });
+
+      return w;
+    });
+
+    const notif = await prisma.notification.findFirst({
+      where: { userId: targetUserId, type: NotificationType.ACCOUNT_WARNED },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (notif) emitToUser(targetUserId, 'notification', notif);
+
+    return warning;
+  }
+
+  async getUserReports(params: { status?: ReportStatus; search?: string; page?: number; limit?: number }) {
+    const page = params.page || 1;
+    const limit = params.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.UserReportWhereInput = {};
+
+    if (params.status) {
+      where.status = params.status;
+    }
+
+    if (params.search) {
+      const q = params.search.trim();
+      where.OR = [
+        { reason: { contains: q, mode: 'insensitive' } },
+        { details: { contains: q, mode: 'insensitive' } },
+        { reporter: { email: { contains: q, mode: 'insensitive' } } },
+        { reportedUser: { email: { contains: q, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [total, reports] = await Promise.all([
+      prisma.userReport.count({ where }),
+      prisma.userReport.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          reporter: { select: { id: true, firstName: true, lastName: true, email: true, role: true } },
+          reportedUser: { select: { id: true, firstName: true, lastName: true, email: true, role: true, isSuspended: true, isBlocked: true, isBanned: true } },
+        },
+      }),
+    ]);
+
+    return { reports, total, page, totalPages: Math.ceil(total / limit) };
+  }
+
+  async updateReportStatus(
+    adminUserId: string,
+    reportId: string,
+    data: { status: ReportStatus; adminNotes?: string }
+  ) {
+    const report = await prisma.userReport.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundError('UserReport');
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const r = await tx.userReport.update({
+        where: { id: reportId },
+        data: {
+          status: data.status,
+          adminNotes: data.adminNotes || null,
+          reviewedBy: adminUserId,
+          reviewedAt: new Date(),
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: adminUserId,
+          action: 'REPORT_UPDATED',
+          resource: 'UserReport',
+          resourceId: reportId,
+          details: { status: data.status, adminNotes: data.adminNotes || null },
+        },
+      });
+
+      return r;
+    });
+
+    return updated;
   }
 
   async updateUserStatus(userId: string, data: { isActive?: boolean; isSuspended?: boolean; suspensionReason?: string }) {
@@ -296,7 +734,6 @@ export class AdminService {
       },
     });
 
-    // If suspended or deactivated, invalidate sessions
     if (data.isSuspended || data.isActive === false) {
       await Promise.all([
         prisma.refreshToken.updateMany({ where: { userId }, data: { isRevoked: true } }),

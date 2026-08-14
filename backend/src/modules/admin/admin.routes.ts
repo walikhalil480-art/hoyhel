@@ -3,7 +3,7 @@ import { AdminService } from './admin.service';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { authenticate, requireRoles } from '../../middleware/auth.middleware';
 import { recordAuditLog } from '../../middleware/auditLog.middleware';
-import { UserRoleType, HostApplicationStatus, BookingStatus, PaymentStatus } from '@prisma/client';
+import { UserRoleType, HostApplicationStatus, BookingStatus, PaymentStatus, WarningSeverity, ReportStatus } from '@prisma/client';
 
 const router = Router();
 const adminService = new AdminService();
@@ -57,14 +57,15 @@ router.post(
   })
 );
 
-// User Management Routes
+// User Management & Moderation Routes
 router.get(
   '/users',
   asyncHandler(async (req: Request, res: Response) => {
-    const { search, role, isSuspended, page, limit } = req.query;
+    const { search, role, statusFilter, isSuspended, page, limit } = req.query;
     const result = await adminService.getUsers({
       search: search as string,
       role: role as UserRoleType,
+      statusFilter: statusFilter as string,
       isSuspended: isSuspended === 'true' ? true : isSuspended === 'false' ? false : undefined,
       page: Number(page) || 1,
       limit: Number(limit) || 20,
@@ -78,6 +79,26 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const user = await adminService.getUserById(req.params.id);
     return res.json({ success: true, data: user });
+  })
+);
+
+router.patch(
+  '/users/:id/moderation',
+  recordAuditLog('USER_MODERATION_ACTION', 'User'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { action, reason } = req.body;
+    const updated = await adminService.updateUserModerationStatus(req.user!.userId, req.params.id, { action, reason });
+    return res.json({ success: true, message: `User status updated to ${action}`, data: updated });
+  })
+);
+
+router.post(
+  '/users/:id/warnings',
+  recordAuditLog('USER_WARNING_ISSUED', 'User'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { reason, severity } = req.body;
+    const warning = await adminService.issueUserWarning(req.user!.userId, req.params.id, { reason, severity });
+    return res.json({ success: true, message: 'Official warning issued', data: warning });
   })
 );
 
@@ -106,6 +127,31 @@ router.delete(
   asyncHandler(async (req: Request, res: Response) => {
     const result = await adminService.deleteUser(req.user!.userId, req.params.id);
     return res.json(result);
+  })
+);
+
+// Reports Management Routes
+router.get(
+  '/reports',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { status, search, page, limit } = req.query;
+    const result = await adminService.getUserReports({
+      status: status as ReportStatus,
+      search: search as string,
+      page: Number(page) || 1,
+      limit: Number(limit) || 20,
+    });
+    return res.json({ success: true, data: result.reports, meta: { total: result.total, page: result.page, totalPages: result.totalPages } });
+  })
+);
+
+router.patch(
+  '/reports/:id',
+  recordAuditLog('REPORT_REVIEWED', 'UserReport'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { status, adminNotes } = req.body;
+    const report = await adminService.updateReportStatus(req.user!.userId, req.params.id, { status, adminNotes });
+    return res.json({ success: true, message: `Report status updated to ${status}`, data: report });
   })
 );
 

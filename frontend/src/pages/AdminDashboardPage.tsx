@@ -45,6 +45,12 @@ export const AdminDashboardPage: React.FC = () => {
 
         <div className="flex items-center gap-2 p-1.5 glass-panel rounded-xl border border-slate-800 text-xs">
           <span className="px-3.5 py-1.5 rounded-lg bg-indigo-600 text-white font-bold">Overview</span>
+          <Link to="/admin/users" className="px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-white font-medium flex items-center gap-1">
+            <Users className="w-3.5 h-3.5 text-indigo-400" /> Users
+          </Link>
+          <Link to="/admin/reports" className="px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-white font-medium flex items-center gap-1">
+            User Reports
+          </Link>
           <Link to="/admin/bookings" className="px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-white font-medium flex items-center gap-1">
             <Calendar className="w-3.5 h-3.5 text-sky-400" /> Reservations
           </Link>
